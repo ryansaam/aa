@@ -37,6 +37,7 @@ type UnverifiedUser struct {
 
 type User struct {
 	ID          pgtype.UUID
+	SecondaryID pgtype.UUID
 	Firstname   string
 	Lastname    string
 	Email       string

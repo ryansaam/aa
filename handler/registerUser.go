@@ -79,7 +79,6 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 	if err := json.NewDecoder(request.Body).Decode(&registerInfo); err != nil {
 		write.WriteHeader(http.StatusBadRequest)
 		writeResponse(write, []byte{}, "Invalid request body.")
-		log.Printf("Failed to decode request body; RegisterUser(); error: %v\n", err)
 		return
 	}
 
@@ -88,13 +87,19 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 	if !nameRegex.MatchString(registerInfo.Firstname) {
 		write.WriteHeader(http.StatusBadRequest)
 		writeResponse(write, []byte{}, "First name format not allowed.")
-		log.Printf("Invalid first name format; RegisterUser(); firstname: %s\n", registerInfo.Firstname)
 		return
 	}
 	if !nameRegex.MatchString(registerInfo.Lastname) {
 		write.WriteHeader(http.StatusBadRequest)
 		writeResponse(write, []byte{}, "Last name format not allowed.")
-		log.Printf("Invalid last name format; RegisterUser(); lastname: %s\n", registerInfo.Lastname)
+		return
+	}
+
+	// Validate email
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	if !emailRegex.MatchString(registerInfo.Email) {
+		write.WriteHeader(http.StatusBadRequest)
+		writeResponse(write, []byte{}, "Invalid email format.")
 		return
 	}
 
@@ -102,7 +107,6 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 	if !isValidPassword(registerInfo.Password) {
 		write.WriteHeader(http.StatusBadRequest)
 		writeResponse(write, []byte{}, "Password format not allowed.")
-		log.Printf("Invalid password format; RegisterUser(); email: %s\n", registerInfo.Email)
 		return
 	}
 
@@ -111,11 +115,11 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 	secondaryID := uuid.New()
 	salt := []byte(secondaryID.String())
 
-	passwordHash, err := scrypt.Key(password, salt, 32768, 8, 2, 32)
+	passwordHash, err := scrypt.Key(password, salt, 1<<17, 8, 1, 64)
 	if err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
-		log.Printf("Failed to hash password; RegisterUser(); error: %v; email: %s\n", err, registerInfo.Email)
+		log.Printf("Failed to hash password; RegisterUser() -> scrypt.Key(); error: %v", err)
 		return
 	}
 
@@ -129,34 +133,28 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 	if err := queries.InsertUnverifiedUser(ctx, unverifiedParams); err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
-		log.Printf("Failed to insert unverified user; RegisterUser(); error: %v; email: %s\n", err, registerInfo.Email)
+		log.Printf("Failed to insert unverified user; RegisterUser() -> queries.InsertUnverifiedUser(); error: %v", err)
 		return
 	}
 
 	newUserParams := db.InsertNewUserParams{
-		ID:        *utils.UUIDToPgUUID(userId),
-		Firstname: strings.ToLower(registerInfo.Firstname),
-		Lastname:  strings.ToLower(registerInfo.Lastname),
-		Email:     registerInfo.Email,
-		Password:  fmt.Sprintf("%x", passwordHash),
+		ID:          *utils.UUIDToPgUUID(userId),
+		SecondaryID: *utils.UUIDToPgUUID(secondaryID),
+		Firstname:   strings.ToLower(registerInfo.Firstname),
+		Lastname:    strings.ToLower(registerInfo.Lastname),
+		Email:       registerInfo.Email,
+		Password:    fmt.Sprintf("%x", passwordHash),
 	}
 
 	if err := queries.InsertNewUser(ctx, newUserParams); err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
-		log.Printf("Failed to insert new user; RegisterUser(); error: %v; email: %s\n", err, registerInfo.Email)
+		log.Printf("Failed to insert new user; RegisterUser() -> queries.InsertNewUser(); error: %v", err)
 		return
 	}
 
 	// Create refresh token
-	jti, err := uuid.NewRandom()
-	if err != nil {
-		write.WriteHeader(http.StatusInternalServerError)
-		writeResponse(write, []byte{}, internalServerErrorMsg)
-		log.Printf("Failed to generate JTI UUID; RegisterUser(); error: %v\n", err)
-		return
-	}
-
+	jti := uuid.New()
 	exp := time.Now().Add(90 * 24 * time.Hour).Truncate(time.Millisecond)
 	now := time.Now().Truncate(time.Millisecond)
 
@@ -175,7 +173,7 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 	if err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
-		log.Printf("Failed to sign refresh token; RegisterUser(); error: %v; userID: %s\n", err, userId.String())
+		log.Printf("Failed to sign refresh token; RegisterUser() -> token.SignedString(); error: %v\n", err)
 		return
 	}
 
@@ -183,7 +181,7 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 	if err := utils.InsertRefreshTokenForUser(userId.String(), jti.String(), exp, ctx, queries); err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
-		log.Printf("Failed to insert refresh token; RegisterUser(); error: %v; userID: %s\n", err, userId.String())
+		log.Printf("Failed to insert refresh token; RegisterUser() -> utils.InsertRefreshTokenForUser(); error: %v\n", err)
 		return
 	}
 
@@ -192,7 +190,7 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 	if err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
-		log.Printf("Failed to encrypt refresh token; RegisterUser(); error: %v; internalErr: %v; userID: %s\n", err, internalErr, userId.String())
+		log.Printf("Failed to encrypt refresh token; RegisterUser() -> utils.Encrypt(); error: %v; internalErr: %v\n", err, internalErr)
 		return
 	}
 
