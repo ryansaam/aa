@@ -48,10 +48,10 @@ func main() {
 	// Set up CORS options
 	corsOptions := cors.Options{
 		// Only allow the specific origin for your frontend
-		AllowedOrigins:   []string{"*"},
+		AllowedOrigins:   []string{"http://localhost:5173", "https://app.knomor.info"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
-		AllowCredentials: false,
+		AllowCredentials: true,
 		MaxAge:           300, // Max cache age in seconds
 	}
 

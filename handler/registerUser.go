@@ -53,8 +53,10 @@ func writeResponse(write http.ResponseWriter, encryptedRefreshToken []byte, errM
 	}
 
 	response := Response{
-		RefreshToken: utils.Encode64(encryptedRefreshToken),
-		Error:        errMessage,
+		Error: errMessage,
+	}
+	if encryptedRefreshToken != nil {
+		response.RefreshToken = utils.Encode64(encryptedRefreshToken)
 	}
 
 	if err := json.NewEncoder(write).Encode(response); err != nil {
@@ -186,8 +188,21 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 		return
 	}
 
+	isLocalhost := strings.Contains(request.Host, "localhost")
+	// Set encrypted refresh token as a secure, HttpOnly cookie
+	http.SetCookie(write, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    utils.Encode64(encryptedToken),
+		Path:     "/",                     // Send with all requests
+		Expires:  exp,                     // Match JWT expiration
+		HttpOnly: true,                    // Inaccessible to JavaScript
+		Secure:   !isLocalhost,            // Send only over HTTPS
+		SameSite: http.SameSiteStrictMode, // Restrict cross-site requests
+	})
+
+	// Return 200 with no token in response body
 	write.WriteHeader(http.StatusOK)
-	writeResponse(write, encryptedToken, "")
+	writeResponse(write, nil, "")
 }
 
 // // construct and fire mixpanel event
