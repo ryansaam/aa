@@ -13,23 +13,21 @@ import (
 
 const insertNewUser = `-- name: InsertNewUser :exec
 INSERT INTO users
-(id, secondary_id, firstname, lastname, email, password)
-VALUES ($1, $2, $3, $4, $5, $6)
+(id, firstname, lastname, email, password)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type InsertNewUserParams struct {
-	ID          pgtype.UUID
-	SecondaryID pgtype.UUID
-	Firstname   string
-	Lastname    string
-	Email       string
-	Password    string
+	ID        pgtype.UUID
+	Firstname string
+	Lastname  string
+	Email     string
+	Password  string
 }
 
 func (q *Queries) InsertNewUser(ctx context.Context, arg InsertNewUserParams) error {
 	_, err := q.db.Exec(ctx, insertNewUser,
 		arg.ID,
-		arg.SecondaryID,
 		arg.Firstname,
 		arg.Lastname,
 		arg.Email,

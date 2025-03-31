@@ -12,7 +12,6 @@ CREATE TABLE issued_refresh_tokens_blacklist (
 
 CREATE TABLE users (
     id              UUID PRIMARY KEY NOT NULL,
-    secondary_id    UUID UNIQUE NOT NULL,
     firstname       varchar(256) NOT NULL,
     lastname        varchar(256) NOT NULL,
     email           varchar(512) UNIQUE NOT NULL,

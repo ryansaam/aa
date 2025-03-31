@@ -3,18 +3,16 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
-	"time"
 	"unicode"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"golang.org/x/crypto/scrypt"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ryansaam/aa/db"
 	"github.com/ryansaam/aa/utils"
@@ -60,11 +58,14 @@ func writeResponse(write http.ResponseWriter, encryptedRefreshToken []byte, errM
 	}
 
 	if err := json.NewEncoder(write).Encode(response); err != nil {
-		log.Fatalf("Error encoding response: %s\n", err)
+		log.Printf("Error encoding response: %v\n", err)
+		write.WriteHeader(http.StatusInternalServerError)
+		write.Write([]byte(`{"error": "unexpected server error"}`))
 	}
 }
 
-func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.Context, queries *db.Queries) {
+// RegisterUser handles new account creation, password hashing, user and unverified inserts, and refresh token issuance.
+func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.Context, queries *db.Queries, dbpool *pgxpool.Pool) {
 	internalServerErrorMsg := "Sorry, we're having trouble processing your request. Try again later."
 
 	// Parse request body
@@ -111,26 +112,35 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 	}
 
 	// Hash password
-	password := []byte(registerInfo.Password)
-	secondaryID := uuid.New()
-	salt := []byte(secondaryID.String())
-
-	passwordHash, err := scrypt.Key(password, salt, 1<<17, 8, 1, 64)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(registerInfo.Password), bcrypt.DefaultCost)
 	if err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
-		log.Printf("Failed to hash password; RegisterUser() -> scrypt.Key(); error: %v", err)
+		log.Printf("Failed to hash password with bcrypt: %v", err)
 		return
 	}
 
 	userId := uuid.New()
+
+	// Begin transaction
+	tx, err := dbpool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		write.WriteHeader(http.StatusInternalServerError)
+		writeResponse(write, []byte{}, internalServerErrorMsg)
+		log.Printf("Failed to begin transaction; RegisterUser() -> BeginTx(); error: %v", err)
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	txQueries := db.New(tx)
+
 	unverifiedParams := db.InsertUnverifiedUserParams{
 		ID:               *utils.UUIDToPgUUID(userId),
 		Email:            registerInfo.Email,
 		VerificationCode: "",
 	}
 
-	if err := queries.InsertUnverifiedUser(ctx, unverifiedParams); err != nil {
+	if err := txQueries.InsertUnverifiedUser(ctx, unverifiedParams); err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
 		log.Printf("Failed to insert unverified user; RegisterUser() -> queries.InsertUnverifiedUser(); error: %v", err)
@@ -138,64 +148,46 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 	}
 
 	newUserParams := db.InsertNewUserParams{
-		ID:          *utils.UUIDToPgUUID(userId),
-		SecondaryID: *utils.UUIDToPgUUID(secondaryID),
-		Firstname:   strings.ToLower(registerInfo.Firstname),
-		Lastname:    strings.ToLower(registerInfo.Lastname),
-		Email:       registerInfo.Email,
-		Password:    fmt.Sprintf("%x", passwordHash),
+		ID:        *utils.UUIDToPgUUID(userId),
+		Firstname: strings.ToLower(registerInfo.Firstname),
+		Lastname:  strings.ToLower(registerInfo.Lastname),
+		Email:     registerInfo.Email,
+		Password:  string(hashedPassword),
 	}
 
-	if err := queries.InsertNewUser(ctx, newUserParams); err != nil {
+	if err := txQueries.InsertNewUser(ctx, newUserParams); err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
 		log.Printf("Failed to insert new user; RegisterUser() -> queries.InsertNewUser(); error: %v", err)
 		return
 	}
 
-	// Create refresh token
-	jti := uuid.New()
-	exp := time.Now().Add(90 * 24 * time.Hour).Truncate(time.Millisecond)
-	now := time.Now().Truncate(time.Millisecond)
-
-	claims := &utils.Claims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   userId.String(),
-			ExpiresAt: &jwt.NumericDate{Time: exp},
-			ID:        jti.String(),
-			Issuer:    "Knomor AA service",
-			IssuedAt:  &jwt.NumericDate{Time: now},
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	refreshToken, err := token.SignedString([]byte(os.Getenv("REFRESH_TOKEN_SECRET")))
-	if err != nil {
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
-		log.Printf("Failed to sign refresh token; RegisterUser() -> token.SignedString(); error: %v\n", err)
+		log.Printf("Failed to commit transaction; error: %v", err)
 		return
 	}
 
-	// Store refresh token in DB
-	if err := utils.InsertRefreshTokenForUser(userId.String(), jti.String(), exp, ctx, queries); err != nil {
+	// Create refresh token
+	encryptedToken, jti, exp, err := utils.CreateEncryptedRefreshToken(userId)
+	if err != nil {
+		write.WriteHeader(http.StatusInternalServerError)
+		writeResponse(write, []byte{}, internalServerErrorMsg)
+		log.Printf("Failed to generate and encrypt refresh token: %v", err)
+		return
+	}
+
+	if err := utils.InsertRefreshTokenForUser(userId.String(), jti, exp, ctx, queries); err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
 		log.Printf("Failed to insert refresh token; RegisterUser() -> utils.InsertRefreshTokenForUser(); error: %v\n", err)
 		return
 	}
 
-	// Encrypt the refresh token
-	encryptedRefreshToken, internalErr, err := utils.Encrypt([]byte(refreshToken), []byte(os.Getenv("CIPHER_KEY")))
-	if err != nil {
-		write.WriteHeader(http.StatusInternalServerError)
-		writeResponse(write, []byte{}, internalServerErrorMsg)
-		log.Printf("Failed to encrypt refresh token; RegisterUser() -> utils.Encrypt(); error: %v; internalErr: %v\n", err, internalErr)
-		return
-	}
-
 	write.WriteHeader(http.StatusOK)
-	writeResponse(write, encryptedRefreshToken, "")
+	writeResponse(write, encryptedToken, "")
 }
 
 // // construct and fire mixpanel event

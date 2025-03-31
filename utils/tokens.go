@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -49,4 +50,44 @@ func InsertRefreshTokenForUser(subject, id string, expiresAt time.Time, ctx cont
 	}
 
 	return nil
+}
+
+// CreateEncryptedRefreshToken generates a JWT with standard claims,
+// signs it with the REFRESH_TOKEN_SECRET, then encrypts it with CIPHER_KEY.
+// Returns the encrypted token and the token ID (jti) for DB storage.
+func CreateEncryptedRefreshToken(userID uuid.UUID) (encrypted []byte, jti string, exp time.Time, err error) {
+	// Load secrets from env
+	refreshSecret := os.Getenv("REFRESH_TOKEN_SECRET")
+	cipherKey := os.Getenv("CIPHER_KEY")
+
+	// Token claims
+	jtiUUID := uuid.New()
+	jti = jtiUUID.String()
+	exp = time.Now().Add(90 * 24 * time.Hour).Truncate(time.Millisecond)
+	now := time.Now().Truncate(time.Millisecond)
+
+	claims := &Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID.String(),
+			ExpiresAt: &jwt.NumericDate{Time: exp},
+			ID:        jti,
+			Issuer:    "Knomor AA service",
+			IssuedAt:  &jwt.NumericDate{Time: now},
+		},
+	}
+
+	// Create and sign token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(refreshSecret))
+	if err != nil {
+		return nil, "", time.Time{}, err
+	}
+
+	// Encrypt the token
+	encrypted, err = Encrypt([]byte(signed), []byte(cipherKey))
+	if err != nil {
+		return nil, "", time.Time{}, err
+	}
+
+	return encrypted, jti, exp, nil
 }

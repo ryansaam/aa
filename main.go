@@ -54,6 +54,20 @@ func main() {
 		AllowCredentials: false,
 		MaxAge:           300, // Max cache age in seconds
 	}
+
+	// check for required environment variables
+	secret := os.Getenv("REFRESH_TOKEN_SECRET")
+	if secret == "" {
+		log.Printf("Refresh token secret missing in .env file; main() -> os.Getenv()\n")
+		return
+	}
+
+	cipher := os.Getenv("CIPHER_KEY")
+	if cipher == "" {
+		log.Printf("Cipher key missing in .env file; main() -> os.Getenv()\n")
+		return
+	}
+
 	r.Use(cors.Handler(corsOptions))
 
 	r.Get("/aa", func(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +83,7 @@ func main() {
 	})
 
 	r.Post("/aa/signup", func(w http.ResponseWriter, r *http.Request) {
-		handler.RegisterUser(w, r, ctx, queries)
+		handler.RegisterUser(w, r, ctx, queries, dbpool)
 	})
 
 	// serve api

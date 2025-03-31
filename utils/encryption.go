@@ -10,24 +10,24 @@ import (
 	"log"
 )
 
-func Encrypt(plaintext []byte, key []byte) ([]byte, error, error) {
+func Encrypt(plaintext []byte, key []byte) ([]byte, error) {
 	// https://astaxie.gitbooks.io/build-web-application-with-golang/en/09.6.html
 	c, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, errors.New("error; encryption.go: Encrypt() -> aes.NewCipher()"), err
+		return nil, errors.New("error; encryption.go: Encrypt() -> aes.NewCipher()")
 	}
 
 	gcm, err := cipher.NewGCM(c)
 	if err != nil {
-		return nil, errors.New("error; encryption.go: Encrypt() -> cipher.NewGCM()"), err
+		return nil, errors.New("error; encryption.go: Encrypt() -> cipher.NewGCM()")
 	}
 
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, errors.New("error; encryption.go: Encrypt() -> io.ReadFull()"), err
+		return nil, errors.New("error; encryption.go: Encrypt() -> io.ReadFull()")
 	}
 
-	return gcm.Seal(nonce, nonce, plaintext, nil), nil, nil
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
 
 func Decrypt(ciphertext []byte, key []byte) ([]byte, error) {
