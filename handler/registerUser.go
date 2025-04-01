@@ -8,7 +8,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -23,30 +22,27 @@ import (
 	"github.com/ryansaam/aa/utils"
 )
 
-func isValidPassword(password string) bool {
-	// Check length
-	if len(password) < 8 {
+func isValidPassword(pw string) bool {
+	if len(pw) < 8 {
 		return false
 	}
 
-	hasUppercase := false
+	hasUpper := false
+	hasLower := false
 	hasNumber := false
 
-	// Check for at least one uppercase letter and one number
-	for _, char := range password {
-		if unicode.IsUpper(char) {
-			hasUppercase = true
-		} else if unicode.IsDigit(char) {
+	for _, c := range pw {
+		switch {
+		case 'A' <= c && c <= 'Z':
+			hasUpper = true
+		case 'a' <= c && c <= 'z':
+			hasLower = true
+		case '0' <= c && c <= '9':
 			hasNumber = true
-		}
-
-		// Break the loop early if both conditions are satisfied
-		if hasUppercase && hasNumber {
-			break
 		}
 	}
 
-	return hasUppercase && hasNumber
+	return hasUpper && hasLower && hasNumber
 }
 
 func writeResponse(write http.ResponseWriter, encryptedRefreshToken []byte, errMessage string) {
@@ -83,6 +79,7 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 		Password      string `json:"password"`
 		Email         string `json:"email"`
 		BillingName   string `json:"billing_name"`
+		BillingEmail  string `json:"billing_email"`
 		PaymentMethod string `json:"payment_method"`
 		Address       string `json:"address"`
 		Apartment     string `json:"apartment"`
@@ -98,28 +95,82 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 		return
 	}
 
-	// Validate first and last name
-	nameRegex := regexp.MustCompile(`^[a-zA-Z](?:[a-zA-Z\s]{0,13}[a-zA-Z])?$`)
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	nameRegex := regexp.MustCompile(`^[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,32}$`)
+	addressRegex := regexp.MustCompile(`^[\w\s\-.,#/]{5,100}$`)
+	aptRegex := regexp.MustCompile(`^[a-zA-Z0-9\s\-#]+$`)
+	cityRegex := regexp.MustCompile(`^[A-Za-zÀ-ÖØ-öø-ÿ' -]{2,64}$`)
+	zipRegex := regexp.MustCompile(`^\d{5}(-\d{4})?$`)
+
+	usStates := map[string]bool{
+		"AL": true, "AK": true, "AZ": true, "AR": true, "CA": true, "CO": true, "CT": true, "DE": true, "FL": true,
+		"GA": true, "HI": true, "ID": true, "IL": true, "IN": true, "IA": true, "KS": true, "KY": true, "LA": true,
+		"ME": true, "MD": true, "MA": true, "MI": true, "MN": true, "MS": true, "MO": true, "MT": true, "NE": true,
+		"NV": true, "NH": true, "NJ": true, "NM": true, "NY": true, "NC": true, "ND": true, "OH": true, "OK": true,
+		"OR": true, "PA": true, "RI": true, "SC": true, "SD": true, "TN": true, "TX": true, "UT": true, "VT": true,
+		"VA": true, "WA": true, "WV": true, "WI": true, "WY": true,
+	}
+
 	if !nameRegex.MatchString(registerInfo.Firstname) {
 		write.WriteHeader(http.StatusBadRequest)
 		writeResponse(write, []byte{}, "first_name_not_allowed")
 		return
 	}
+
 	if !nameRegex.MatchString(registerInfo.Lastname) {
 		write.WriteHeader(http.StatusBadRequest)
 		writeResponse(write, []byte{}, "last_name_not_allowed")
 		return
 	}
 
-	// Validate email
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 	if !emailRegex.MatchString(registerInfo.Email) {
 		write.WriteHeader(http.StatusBadRequest)
 		writeResponse(write, []byte{}, "email_not_allowed")
 		return
 	}
 
-	// Check password complexity
+	if !emailRegex.MatchString(registerInfo.BillingEmail) {
+		write.WriteHeader(http.StatusBadRequest)
+		writeResponse(write, []byte{}, "billing_email_not_allowed")
+		return
+	}
+
+	if !nameRegex.MatchString(registerInfo.BillingName) {
+		write.WriteHeader(http.StatusBadRequest)
+		writeResponse(write, []byte{}, "billing_name_not_allowed")
+		return
+	}
+
+	if !addressRegex.MatchString(registerInfo.Address) {
+		write.WriteHeader(http.StatusBadRequest)
+		writeResponse(write, []byte{}, "address_not_allowed")
+		return
+	}
+
+	if registerInfo.Apartment != "" && !aptRegex.MatchString(registerInfo.Apartment) {
+		write.WriteHeader(http.StatusBadRequest)
+		writeResponse(write, []byte{}, "apartment_not_allowed")
+		return
+	}
+
+	if !cityRegex.MatchString(registerInfo.City) {
+		write.WriteHeader(http.StatusBadRequest)
+		writeResponse(write, []byte{}, "city_not_allowed")
+		return
+	}
+
+	if _, ok := usStates[strings.ToUpper(registerInfo.State)]; !ok {
+		write.WriteHeader(http.StatusBadRequest)
+		writeResponse(write, []byte{}, "state_not_allowed")
+		return
+	}
+
+	if !zipRegex.MatchString(registerInfo.Zip) {
+		write.WriteHeader(http.StatusBadRequest)
+		writeResponse(write, []byte{}, "zip_not_allowed")
+		return
+	}
+
 	if !isValidPassword(registerInfo.Password) {
 		write.WriteHeader(http.StatusBadRequest)
 		writeResponse(write, []byte{}, "password_not_allowed")
@@ -184,7 +235,7 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 
 	// Create a new Stripe customer using billing info
 	custParams := &stripe.CustomerParams{
-		Email: stripe.String(registerInfo.Email),
+		Email: stripe.String(registerInfo.BillingEmail),
 		Name:  stripe.String(registerInfo.BillingName),
 		Address: &stripe.AddressParams{
 			Line1:      stripe.String(registerInfo.Address),
