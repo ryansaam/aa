@@ -33,3 +33,11 @@ CREATE TABLE unverified_users (
     email               varchar(512) UNIQUE NOT NULL,
     verification_code   char(6) NOT NULL
 );
+
+CREATE TABLE stripe_info (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    stripe_customer_id VARCHAR(255) NOT NULL,
+    stripe_subscription_id VARCHAR(255) NOT NULL,
+    stripe_payment_method_id VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+);

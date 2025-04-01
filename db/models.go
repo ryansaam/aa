@@ -29,6 +29,14 @@ type IssuedRefreshTokensBlacklist struct {
 	Exp pgtype.Timestamptz
 }
 
+type StripeInfo struct {
+	UserID                pgtype.UUID
+	StripeCustomerID      string
+	StripeSubscriptionID  string
+	StripePaymentMethodID string
+	CreatedAt             pgtype.Timestamptz
+}
+
 type UnverifiedUser struct {
 	ID               pgtype.UUID
 	Email            string

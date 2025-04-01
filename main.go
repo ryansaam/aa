@@ -68,6 +68,13 @@ func main() {
 		return
 	}
 
+	stripePrivateKey := os.Getenv("STRIPE_PRIVATE_KEY")
+	if stripePrivateKey == "" {
+		log.Printf("Stripe private key missing in .env file; main() -> os.Getenv()\n")
+		return
+	}
+
+	// routing
 	r.Use(cors.Handler(corsOptions))
 
 	r.Get("/aa", func(w http.ResponseWriter, r *http.Request) {

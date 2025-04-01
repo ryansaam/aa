@@ -53,6 +53,29 @@ func (q *Queries) InsertRefreshToken(ctx context.Context, arg InsertRefreshToken
 	return err
 }
 
+const insertStripeInfo = `-- name: InsertStripeInfo :exec
+INSERT INTO stripe_info 
+(user_id, stripe_customer_id, stripe_subscription_id, stripe_payment_method_id)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertStripeInfoParams struct {
+	UserID                pgtype.UUID
+	StripeCustomerID      string
+	StripeSubscriptionID  string
+	StripePaymentMethodID string
+}
+
+func (q *Queries) InsertStripeInfo(ctx context.Context, arg InsertStripeInfoParams) error {
+	_, err := q.db.Exec(ctx, insertStripeInfo,
+		arg.UserID,
+		arg.StripeCustomerID,
+		arg.StripeSubscriptionID,
+		arg.StripePaymentMethodID,
+	)
+	return err
+}
+
 const insertUnverifiedUser = `-- name: InsertUnverifiedUser :exec
 INSERT INTO unverified_users
 (id, email, verification_code)

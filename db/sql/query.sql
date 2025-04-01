@@ -12,3 +12,8 @@ VALUES ($1, $2, $3, $4, $5);
 INSERT INTO unverified_users
 (id, email, verification_code)
 VALUES ($1, $2, $3);
+
+-- name: InsertStripeInfo :exec
+INSERT INTO stripe_info 
+(user_id, stripe_customer_id, stripe_subscription_id, stripe_payment_method_id)
+VALUES ($1, $2, $3, $4);
