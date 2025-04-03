@@ -17,3 +17,13 @@ VALUES ($1, $2, $3);
 INSERT INTO stripe_info 
 (user_id, stripe_customer_id, stripe_subscription_id, stripe_payment_method_id)
 VALUES ($1, $2, $3, $4);
+
+-- name: GetAuthenticUserWithID :one
+SELECT id, email
+FROM users
+WHERE id = $1;
+
+-- name: CheckIfTokenIsBlacklisted :one
+SELECT *
+FROM issued_refresh_tokens_blacklist
+WHERE jti = $1;

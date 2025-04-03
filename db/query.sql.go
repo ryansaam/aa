@@ -11,6 +11,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const checkIfTokenIsBlacklisted = `-- name: CheckIfTokenIsBlacklisted :one
+SELECT jti, exp
+FROM issued_refresh_tokens_blacklist
+WHERE jti = $1
+`
+
+func (q *Queries) CheckIfTokenIsBlacklisted(ctx context.Context, jti pgtype.UUID) (IssuedRefreshTokensBlacklist, error) {
+	row := q.db.QueryRow(ctx, checkIfTokenIsBlacklisted, jti)
+	var i IssuedRefreshTokensBlacklist
+	err := row.Scan(&i.Jti, &i.Exp)
+	return i, err
+}
+
+const getAuthenticUserWithID = `-- name: GetAuthenticUserWithID :one
+SELECT id, email
+FROM users
+WHERE id = $1
+`
+
+type GetAuthenticUserWithIDRow struct {
+	ID    pgtype.UUID
+	Email string
+}
+
+func (q *Queries) GetAuthenticUserWithID(ctx context.Context, id pgtype.UUID) (GetAuthenticUserWithIDRow, error) {
+	row := q.db.QueryRow(ctx, getAuthenticUserWithID, id)
+	var i GetAuthenticUserWithIDRow
+	err := row.Scan(&i.ID, &i.Email)
+	return i, err
+}
+
 const insertNewUser = `-- name: InsertNewUser :exec
 INSERT INTO users
 (id, firstname, lastname, email, password)

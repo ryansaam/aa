@@ -16,12 +16,12 @@ import (
 
 type Claims struct {
 	Id    string `json:"id"`
-	Phone string `json:"phone_number"`
+	Email string `json:"email"`
 	jwt.RegisteredClaims
 }
 type AuthCredentials struct {
-	ID          uuid.UUID `json:"id"`
-	PhoneNumber string    `json:"phone_number"`
+	ID    pgtype.UUID `json:"id"`
+	Email string      `json:"email"`
 }
 
 func InsertRefreshTokenForUser(subject, id string, expiresAt time.Time, ctx context.Context, queries *db.Queries) error {
@@ -90,4 +90,27 @@ func CreateEncryptedRefreshToken(userID uuid.UUID) (encrypted []byte, jti string
 	}
 
 	return encrypted, jti, exp, nil
+}
+
+func GenerateToken(user AuthCredentials) (string, error) {
+	expirationTime := time.Now().Add(15 * time.Minute)
+	expirationTime = expirationTime.Truncate(time.Millisecond)
+
+	claims := &Claims{
+		Id:    user.ID.String(),
+		Email: user.Email,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: &jwt.NumericDate{Time: expirationTime},
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	signedToken, err := token.SignedString([]byte(os.Getenv("ACCESS_TOKEN_SECRET")))
+
+	if err != nil {
+		log.Println("Could not sign token; tokens.go: GenerateToken() -> token.SignedString()")
+		return "", err
+	}
+
+	return signedToken, nil
 }

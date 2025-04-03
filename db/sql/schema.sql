@@ -2,7 +2,7 @@ CREATE TABLE issued_refresh_tokens (
     sub     uuid REFERENCES users(id) NOT NULL,
     jti     uuid PRIMARY KEY NOT NULL,
     exp     TIMESTAMPTZ NOT NULL,
-    iat     TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+    iat     TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE issued_refresh_tokens_blacklist (
