@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"log"
 	"os"
@@ -84,7 +85,11 @@ func CreateEncryptedRefreshToken(userID uuid.UUID) (encrypted []byte, jti string
 	}
 
 	// Encrypt the token
-	encrypted, err = Encrypt([]byte(signed), []byte(cipherKey))
+	key, err := base64.StdEncoding.DecodeString(cipherKey)
+	if err != nil {
+		return nil, "", time.Time{}, err
+	}
+	encrypted, err = Encrypt([]byte(signed), []byte(key))
 	if err != nil {
 		return nil, "", time.Time{}, err
 	}
