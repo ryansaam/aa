@@ -48,7 +48,7 @@ func main() {
 	// Set up CORS options
 	corsOptions := cors.Options{
 		// Only allow the specific origin for your frontend
-		AllowedOrigins:   []string{"http://localhost:5173", "https://app.knomor.info"},
+		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
@@ -81,8 +81,8 @@ func main() {
 		w.Write([]byte("aa says hello!"))
 	})
 
-	r.Get("/aa/refresh", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("aa says hello!"))
+	r.Get("/aa/token", func(w http.ResponseWriter, r *http.Request) {
+		handler.GetAccessToken(w, r, ctx, queries)
 	})
 
 	r.Post("/aa/login", func(w http.ResponseWriter, r *http.Request) {
