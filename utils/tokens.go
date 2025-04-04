@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -87,11 +86,7 @@ func CreateEncryptedRefreshToken(userID uuid.UUID) (encrypted []byte, jti string
 	}
 
 	// Encrypt the token
-	key, err := base64.StdEncoding.DecodeString(cipherKey)
-	if err != nil {
-		return nil, "", time.Time{}, err
-	}
-	encrypted, err = Encrypt([]byte(signed), []byte(key))
+	encrypted, err = Encrypt([]byte(signed), []byte(cipherKey))
 	if err != nil {
 		return nil, "", time.Time{}, err
 	}
@@ -140,11 +135,7 @@ func ExtractRefreshTokenClaims(request *http.Request) (*Claims, error) {
 	}
 
 	// Decrypt the refresh token using the configured cipher key.
-	key, err := base64.StdEncoding.DecodeString(cipherKey)
-	if err != nil {
-		return nil, err
-	}
-	refreshTokenDecryptedByte, err := Decrypt(encryptedRefreshToken, key)
+	refreshTokenDecryptedByte, err := Decrypt(encryptedRefreshToken, []byte(cipherKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt refresh token: %w", err)
 	}
