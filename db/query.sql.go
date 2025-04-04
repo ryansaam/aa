@@ -24,6 +24,25 @@ func (q *Queries) CheckIfTokenIsBlacklisted(ctx context.Context, jti pgtype.UUID
 	return i, err
 }
 
+const getAuthenticUserWithEmail = `-- name: GetAuthenticUserWithEmail :one
+SELECT id, email, password
+FROM users
+WHERE email = $1
+`
+
+type GetAuthenticUserWithEmailRow struct {
+	ID       pgtype.UUID
+	Email    string
+	Password string
+}
+
+func (q *Queries) GetAuthenticUserWithEmail(ctx context.Context, email string) (GetAuthenticUserWithEmailRow, error) {
+	row := q.db.QueryRow(ctx, getAuthenticUserWithEmail, email)
+	var i GetAuthenticUserWithEmailRow
+	err := row.Scan(&i.ID, &i.Email, &i.Password)
+	return i, err
+}
+
 const getAuthenticUserWithID = `-- name: GetAuthenticUserWithID :one
 SELECT id, email
 FROM users
@@ -104,6 +123,22 @@ func (q *Queries) InsertStripeInfo(ctx context.Context, arg InsertStripeInfoPara
 		arg.StripeSubscriptionID,
 		arg.StripePaymentMethodID,
 	)
+	return err
+}
+
+const insertTokenToBlackList = `-- name: InsertTokenToBlackList :exec
+INSERT INTO issued_refresh_tokens_blacklist 
+(jti, exp) 
+VALUES ($1, $2)
+`
+
+type InsertTokenToBlackListParams struct {
+	Jti pgtype.UUID
+	Exp pgtype.Timestamptz
+}
+
+func (q *Queries) InsertTokenToBlackList(ctx context.Context, arg InsertTokenToBlackListParams) error {
+	_, err := q.db.Exec(ctx, insertTokenToBlackList, arg.Jti, arg.Exp)
 	return err
 }
 

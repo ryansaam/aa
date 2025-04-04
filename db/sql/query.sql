@@ -3,6 +3,11 @@ INSERT INTO issued_refresh_tokens
 (sub, jti, exp) 
 VALUES ($1, $2, $3);
 
+-- name: InsertTokenToBlackList :exec
+INSERT INTO issued_refresh_tokens_blacklist 
+(jti, exp) 
+VALUES ($1, $2);
+
 -- name: InsertNewUser :exec
 INSERT INTO users
 (id, firstname, lastname, email, password)
@@ -22,6 +27,11 @@ VALUES ($1, $2, $3, $4);
 SELECT id, email
 FROM users
 WHERE id = $1;
+
+-- name: GetAuthenticUserWithEmail :one
+SELECT id, email, password
+FROM users
+WHERE email = $1;
 
 -- name: CheckIfTokenIsBlacklisted :one
 SELECT *

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -118,4 +120,49 @@ func GenerateToken(user AuthCredentials) (string, error) {
 	}
 
 	return signedToken, nil
+}
+
+// extractRefreshTokenClaims extracts, decodes, decrypts, and parses the refresh token from the secure cookie.
+// It returns the JWT claims if successful, or an error otherwise.
+func ExtractRefreshTokenClaims(request *http.Request) (*Claims, error) {
+	cipherKey := os.Getenv("CIPHER_KEY")
+
+	// Retrieve the refresh token from the secure cookie.
+	cookie, err := request.Cookie("refresh_token")
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve refresh token cookie: %w", err)
+	}
+
+	// Decode the base64 encoded refresh token.
+	encryptedRefreshToken, err := Decode64(cookie.Value)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode refresh token: %w", err)
+	}
+
+	// Decrypt the refresh token using the configured cipher key.
+	key, err := base64.StdEncoding.DecodeString(cipherKey)
+	if err != nil {
+		return nil, err
+	}
+	refreshTokenDecryptedByte, err := Decrypt(encryptedRefreshToken, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt refresh token: %w", err)
+	}
+
+	// Parse and validate the refresh token with JWT claims.
+	claims := &Claims{}
+	_, err = jwt.ParseWithClaims(string(refreshTokenDecryptedByte), claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("REFRESH_TOKEN_SECRET")), nil
+	})
+	if err != nil {
+		// Use string comparisons to determine the error cause. In a production system, consider using type assertions.
+		if err.Error() == fmt.Sprintf("%s: %s", jwt.ErrTokenInvalidClaims.Error(), jwt.ErrSignatureInvalid.Error()) {
+			return nil, fmt.Errorf("invalid refresh token signature: %w", err)
+		}
+		if err.Error() == fmt.Sprintf("%s: %s", jwt.ErrTokenInvalidClaims.Error(), jwt.ErrTokenExpired.Error()) {
+			return nil, fmt.Errorf("expired refresh token: %w", err)
+		}
+		return nil, fmt.Errorf("unhandled token error: %w", err)
+	}
+	return claims, nil
 }

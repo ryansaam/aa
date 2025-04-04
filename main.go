@@ -86,7 +86,7 @@ func main() {
 	})
 
 	r.Post("/aa/login", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("aa says hello!"))
+		handler.LoginUser(w, r, ctx, queries)
 	})
 
 	r.Post("/aa/signup", func(w http.ResponseWriter, r *http.Request) {
