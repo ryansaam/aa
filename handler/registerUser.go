@@ -311,7 +311,7 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 	}
 
 	// Create refresh token
-	encryptedToken, jti, exp, err := utils.CreateEncryptedRefreshToken(userId)
+	encryptedToken, jti, exp, iat, err := utils.CreateEncryptedRefreshToken(userId)
 	if err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
@@ -319,7 +319,7 @@ func RegisterUser(write http.ResponseWriter, request *http.Request, ctx context.
 		return
 	}
 
-	if err := utils.InsertRefreshTokenForUser(userId.String(), jti, exp, ctx, queries); err != nil {
+	if err := utils.InsertRefreshTokenForUser(userId.String(), jti, exp, iat, ctx, queries); err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
 		log.Printf("Failed to insert refresh token: RegisterUser() -> utils.InsertRefreshTokenForUser(); error: %v\n", err)

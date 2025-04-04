@@ -26,7 +26,7 @@ type AuthCredentials struct {
 	Email string      `json:"email"`
 }
 
-func InsertRefreshTokenForUser(subject, id string, expiresAt time.Time, ctx context.Context, queries *db.Queries) error {
+func InsertRefreshTokenForUser(subject, id string, expiresAt time.Time, issuedAt time.Time, ctx context.Context, queries *db.Queries) error {
 	// convert data types to db types
 	sub, err := uuid.Parse(subject)
 	if err != nil {
@@ -44,6 +44,7 @@ func InsertRefreshTokenForUser(subject, id string, expiresAt time.Time, ctx cont
 		Sub: *UUIDToPgUUID(sub),
 		Jti: *UUIDToPgUUID(jti),
 		Exp: pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		Iat: pgtype.Timestamptz{Time: issuedAt, Valid: true},
 	}
 	err = queries.InsertRefreshToken(ctx, params)
 	if err != nil {
@@ -57,7 +58,7 @@ func InsertRefreshTokenForUser(subject, id string, expiresAt time.Time, ctx cont
 // CreateEncryptedRefreshToken generates a JWT with standard claims,
 // signs it with the REFRESH_TOKEN_SECRET, then encrypts it with CIPHER_KEY.
 // Returns the encrypted token and the token ID (jti) for DB storage.
-func CreateEncryptedRefreshToken(userID uuid.UUID) (encrypted []byte, jti string, exp time.Time, err error) {
+func CreateEncryptedRefreshToken(userID uuid.UUID) (encrypted []byte, jti string, exp time.Time, iat time.Time, err error) {
 	// Load secrets from env
 	refreshSecret := os.Getenv("REFRESH_TOKEN_SECRET")
 	cipherKey := os.Getenv("CIPHER_KEY")
@@ -82,16 +83,16 @@ func CreateEncryptedRefreshToken(userID uuid.UUID) (encrypted []byte, jti string
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString([]byte(refreshSecret))
 	if err != nil {
-		return nil, "", time.Time{}, err
+		return nil, "", time.Time{}, time.Time{}, err
 	}
 
 	// Encrypt the token
 	encrypted, err = Encrypt([]byte(signed), []byte(cipherKey))
 	if err != nil {
-		return nil, "", time.Time{}, err
+		return nil, "", time.Time{}, time.Time{}, err
 	}
 
-	return encrypted, jti, exp, nil
+	return encrypted, jti, exp, now, nil
 }
 
 func GenerateToken(user AuthCredentials) (string, error) {

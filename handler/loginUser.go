@@ -77,7 +77,7 @@ func LoginUser(write http.ResponseWriter, request *http.Request, ctx context.Con
 		writeAccessTokenResponse(write, []byte{}, internalServerErrorMsg)
 		return
 	}
-	encryptedToken, jti, exp, err := utils.CreateEncryptedRefreshToken(userID)
+	encryptedToken, jti, exp, iat, err := utils.CreateEncryptedRefreshToken(userID)
 	if err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
@@ -86,7 +86,7 @@ func LoginUser(write http.ResponseWriter, request *http.Request, ctx context.Con
 	}
 
 	// Insert the new refresh token into the database.
-	if err := utils.InsertRefreshTokenForUser(authenticUser.ID.String(), jti, exp, ctx, queries); err != nil {
+	if err := utils.InsertRefreshTokenForUser(authenticUser.ID.String(), jti, exp, iat, ctx, queries); err != nil {
 		write.WriteHeader(http.StatusInternalServerError)
 		writeResponse(write, []byte{}, internalServerErrorMsg)
 		log.Printf("Failed to insert refresh token: LoginUser() -> utils.InsertRefreshTokenForUser(); error: %v\n", err)

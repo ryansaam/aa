@@ -1,7 +1,7 @@
 -- name: InsertRefreshToken :exec
 INSERT INTO issued_refresh_tokens 
-(sub, jti, exp) 
-VALUES ($1, $2, $3);
+(sub, jti, exp, iat) 
+VALUES ($1, $2, $3, $4);
 
 -- name: InsertTokenToBlackList :exec
 INSERT INTO issued_refresh_tokens_blacklist 

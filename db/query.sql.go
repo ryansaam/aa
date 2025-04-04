@@ -88,18 +88,24 @@ func (q *Queries) InsertNewUser(ctx context.Context, arg InsertNewUserParams) er
 
 const insertRefreshToken = `-- name: InsertRefreshToken :exec
 INSERT INTO issued_refresh_tokens 
-(sub, jti, exp) 
-VALUES ($1, $2, $3)
+(sub, jti, exp, iat) 
+VALUES ($1, $2, $3, $4)
 `
 
 type InsertRefreshTokenParams struct {
 	Sub pgtype.UUID
 	Jti pgtype.UUID
 	Exp pgtype.Timestamptz
+	Iat pgtype.Timestamptz
 }
 
 func (q *Queries) InsertRefreshToken(ctx context.Context, arg InsertRefreshTokenParams) error {
-	_, err := q.db.Exec(ctx, insertRefreshToken, arg.Sub, arg.Jti, arg.Exp)
+	_, err := q.db.Exec(ctx, insertRefreshToken,
+		arg.Sub,
+		arg.Jti,
+		arg.Exp,
+		arg.Iat,
+	)
 	return err
 }
 
