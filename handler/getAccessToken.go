@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/ryansaam/aa/db"
 	"github.com/ryansaam/aa/utils"
 )
@@ -52,7 +55,8 @@ func GetAccessToken(write http.ResponseWriter, request *http.Request, ctx contex
 	}
 
 	_, err = queries.CheckIfTokenIsBlacklisted(ctx, *utils.UUIDToPgUUID(jti))
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) && !strings.Contains(err.Error(), "no rows in result set") {
+
 		log.Printf("Database error while checking blacklist: GetAccessToken() -> queries.CheckIfTokenIsBlacklisted(); error: %v\n", err)
 		write.WriteHeader(http.StatusInternalServerError)
 		writeAccessTokenResponse(write, []byte{}, internalServerErrorMsg)
